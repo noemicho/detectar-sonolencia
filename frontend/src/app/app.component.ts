@@ -13,7 +13,7 @@ export class AppComponent {
   @ViewChild('video') videoRef!: ElementRef;
   data: any;
 
-  //constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) {}
   
   async startDetection() {
     const video = this.videoRef.nativeElement;
@@ -31,7 +31,7 @@ export class AppComponent {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL('image/jpeg');
 
-    //this.http.post('http://localhost:5000/process_frame', { image: dataUrl })
-    //  .subscribe(res => this.data = res);
+    this.http.post('http://localhost:5000/process_frame', { image: dataUrl })
+      .subscribe(res => this.data = res);
   }
 }
