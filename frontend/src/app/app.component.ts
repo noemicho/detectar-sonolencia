@@ -14,6 +14,7 @@ export class AppComponent {
   @ViewChild('video') videoRef!: ElementRef;
   @ViewChild('overlay') overlayRef!: ElementRef;
   data: any;
+  showOverlay: boolean = false;
 
   constructor(private http: HttpClient) {}
   
@@ -24,7 +25,7 @@ export class AppComponent {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
     video.srcObject = stream;
 
-    setInterval(() => this.captureAndSend(video), 100); // 10 frames por segundo
+    setInterval(() => this.captureAndSend(video), 200); // 5 frames por segundo
   }
 
   captureAndSend(video: HTMLVideoElement) {
@@ -39,8 +40,19 @@ export class AppComponent {
     this.http.post('http://localhost:5000/process_frame', { image: dataUrl })
       .subscribe(res => {
         this.data = res;
-        this.drawOverlay(res);
+        if(this.showOverlay){
+          this.drawOverlay(res);
+        }
+        else{
+          const overlayCanvas: HTMLCanvasElement = this.overlayRef.nativeElement;
+          const ctx = overlayCanvas.getContext('2d')!;
+          ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        }
       });
+  }
+
+  toggleOverlay(){
+    this.showOverlay = !this.showOverlay;
   }
 
   drawOverlay(res: any) {
