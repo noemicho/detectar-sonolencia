@@ -1,120 +1,122 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import cv2
-import mediapipe as mp
-import numpy as np
-import base64
-import time
+import cv2, mediapipe as mp, numpy as np, base64, time
 
 app = Flask(__name__)
-CORS(app)  # permite que o angular acesse a api
+CORS(app)
 
-# mediaPipe
+# inicializa MediaPipe
 mp_face_mesh = mp.solutions.face_mesh
+facemesh = mp_face_mesh.FaceMesh(
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
 
-# indices/pontos do facemesh
+# índices do FaceMesh (olhos e boca)
 p_left_eye = [385, 380, 387, 373, 362, 263]
 p_right_eye = [160, 144, 158, 153, 33, 133]
 p_mouth = [82, 87, 13, 14, 312, 317, 78, 308]
 
-# parâmetros
-ear_limiar = 0.25
-mar_limiar = 0.1
+# thresholds
+ear_limiar = 0.3     
+mar_limiar = 0.6     
+tempo_sono = 1.5      
+
+# variáveis
 sleeping = 0
 blink_count = 0
-t_blinks = time.time()
-c_time = 0
-count_temp = 0
-count_list = []
 t_initial = 0.0
 
 def calculate_ear(face, p_right_eye, p_left_eye):
     try:
         face = np.array([[coord.x, coord.y] for coord in face])
-        face_left = face[p_left_eye, :]
-        face_right = face[p_right_eye, :]
-
-        ear_left = (np.linalg.norm(face_left[0] - face_left[1]) +
-                    np.linalg.norm(face_left[2] - face_left[3])) / \
-                   (2 * np.linalg.norm(face_left[4] - face_left[5]))
-        ear_right = (np.linalg.norm(face_right[0] - face_right[1]) +
-                     np.linalg.norm(face_right[2] - face_right[3])) / \
-                    (2 * np.linalg.norm(face_right[4] - face_right[5]))
+        face_left, face_right = face[p_left_eye, :], face[p_right_eye, :]
+        ear_left = (np.linalg.norm(face_left[0]-face_left[1]) +
+                    np.linalg.norm(face_left[2]-face_left[3])) / \
+                   (2*np.linalg.norm(face_left[4]-face_left[5]))
+        ear_right = (np.linalg.norm(face_right[0]-face_right[1]) +
+                     np.linalg.norm(face_right[2]-face_right[3])) / \
+                    (2*np.linalg.norm(face_right[4]-face_right[5]))
     except:
-        ear_left, ear_right = 0.0, 0.0
+        return 0.0
+    return (ear_left+ear_right)/2
 
-    return (ear_left + ear_right) / 2
 
 def calculate_mar(face, p_mouth):
     try:
         face = np.array([[coord.x, coord.y] for coord in face])
-        face_mouth = face[p_mouth, :]
-        mar = (np.linalg.norm(face_mouth[0] - face_mouth[1]) +
-               np.linalg.norm(face_mouth[2] - face_mouth[3]) +
-               np.linalg.norm(face_mouth[4] - face_mouth[5])) / \
-              (2 * np.linalg.norm(face_mouth[6] - face_mouth[7]))
+        m = face[p_mouth, :]
+        mar = (np.linalg.norm(m[0]-m[1]) +
+               np.linalg.norm(m[2]-m[3]) +
+               np.linalg.norm(m[4]-m[5])) / \
+              (2*np.linalg.norm(m[6]-m[7]))
     except:
-        mar = 0.0
+        return 0.0
     return mar
 
+# rota de reset
+@app.route("/reset", methods=["POST"])
+def reset():
+    global sleeping, blink_count, t_initial
+    sleeping = 0
+    blink_count = 0
+    t_initial = 0.0
+    return jsonify({"status": "reset ok"})
 
+# rota de processar dados
 @app.route("/process_frame", methods=["POST"])
 def process_frame():
-    global sleeping, blink_count, t_blinks, c_time, count_temp, count_list, t_initial
+    global sleeping, blink_count, t_initial
 
-    # recebe imagem base64 do angular
+    # recebe frame do Angular (base64)
     data = request.json["image"]
     img_bytes = base64.b64decode(data.split(",")[1])
-    np_arr = np.frombuffer(img_bytes, np.uint8)
-    frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    frame = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
 
-    with mp_face_mesh.FaceMesh(
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
-    ) as facemesh:
-        results = facemesh.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    results = facemesh.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    if not results.multi_face_landmarks:
+        return jsonify({"ear": 0, "mar": 0, "blinks": blink_count, "time_closed": 0, "sleepy": False})
 
-        if not results.multi_face_landmarks:
-            return jsonify({"ear": 0, "mar": 0, "blinks": blink_count, "time_closed": 0, "sleepy": False})
+    face = results.multi_face_landmarks[0].landmark
+    ear, mar = calculate_ear(face, p_right_eye, p_left_eye), calculate_mar(face, p_mouth)
 
-        face = results.multi_face_landmarks[0].landmark
+    h, w, _ = frame.shape
+    points_eye = []
+    points_mouth = []
 
-        ear = calculate_ear(face, p_right_eye, p_left_eye)
-        mar = calculate_mar(face, p_mouth)
+    for idx in p_left_eye + p_right_eye:
+        points_eye.append({"x": int(face[idx].x * w), "y": int(face[idx].y * h)})
 
-        # lógica de piscadas e tempo olho fechado
-        if ear < ear_limiar and mar < mar_limiar:
-            if sleeping == 0:
-                t_initial = time.time()
-                blink_count += 1
-            sleeping = 1
-        if (sleeping == 1 and ear >= ear_limiar) or (ear <= ear_limiar and mar >= mar_limiar):
-            sleeping = 0
+    for idx in p_mouth:
+        points_mouth.append({"x": int(face[idx].x * w), "y": int(face[idx].y * h)})
 
-        t_final = time.time()
-        tempo = (t_final - t_initial) if sleeping == 1 else 0.0
+    # lógica de piscada / olhos fechados
+    if ear < ear_limiar:  
+        # olho fechado
+        if sleeping == 0:
+            t_initial = time.time()
+            blink_count += 1
+        sleeping = 1
+    else:
+        sleeping = 0
 
-        # contar piscadas por minuto
-        time_elapsed = t_final - t_blinks
-        if time_elapsed >= (c_time + 1):
-            c_time = time_elapsed
-            blinks_per_sec = blink_count - count_temp
-            count_temp = blink_count
-            count_list.append(blinks_per_sec)
-            count_list = count_list if (len(count_list) <= 60) else count_list[-60:]
+    # tempo com olhos fechados
+    tempo = (time.time() - t_initial) if sleeping else 0.0
 
-        blinks_per_minute = 15 if time_elapsed <= 60 else sum(count_list)
+    # boolean
+    sleepy = bool((tempo >= tempo_sono) or (mar >= mar_limiar))
 
-        # critério de sonolência
-        sleepy = tempo >= 1.5 or blinks_per_minute < 10
-
-        return jsonify({
-            "ear": round(ear, 2),
-            "mar": round(mar, 2),
-            "blinks": blink_count,
-            "time_closed": round(tempo, 2),
-            "sleepy": sleepy
-        })
+    return jsonify({
+        "ear": round(ear, 2),
+        "mar": round(mar, 2),
+        "blinks": blink_count,
+        "time_closed": round(tempo, 2),
+        "sleepy": sleepy,
+        "eyes": points_eye,
+        "mouth": points_mouth,
+        "frame_width": w,
+        "frame_height": h
+    })
 
 
 if __name__ == "__main__":

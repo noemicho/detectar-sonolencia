@@ -1,9 +1,26 @@
-<div class="sono">
-  <h2>Detector de Sonolência</h2>
-  <video 
-    #video autoplay playsinline width="320" height="240"
-    style="transform: scaleX(-1);">
-  </video>
-  <button (click)="startDetection()"> Iniciar </button>
+<div class="container">
+  <h2>Sleepiness Detector</h2>
+
+  <div class="content">
+    <div class="video-section">
+      <div class="video-container">
+        <video #video autoplay playsinline></video>
+        <canvas #overlay></canvas>  
+      </div>
+
+      <button (click)="startDetection()"> Start </button>
+    </div>
+ 
+    
+    <div *ngIf="data" class="results">
+      <p><strong>EAR:</strong>{{data.ear}}</p>
+      <p><strong>MAR:</strong>{{data.mar}}</p>
+      <p><strong>Blinks:</strong>{{data.blinks}}</p>
+      <p><strong>Time Closed:</strong>{{data.time_closed}}</p>
+
+      <!-- alerta (se estiver sonolento)-->
+      <h3 *ngIf="data.sleepy" class="alert">Sleepiness detected!</h3>
+    </div>
+  </div>
 </div>
 <router-outlet />
