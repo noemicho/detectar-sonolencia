@@ -12,10 +12,13 @@ facemesh = mp_face_mesh.FaceMesh(
     min_tracking_confidence=0.5
 )
 
-# índices do FaceMesh (olhos e boca)
+# índices do FaceMesh (olhos, boca e contorno do rosto)
 p_left_eye = [385, 380, 387, 373, 362, 263]
 p_right_eye = [160, 144, 158, 153, 33, 133]
 p_mouth = [82, 87, 13, 14, 312, 317, 78, 308]
+p_face = [10,  338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
+            397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
+            172, 58,  132, 93,  234, 127, 162, 21,  54,  103, 67,  109]
 
 # thresholds
 ear_limiar = 0.3     
@@ -83,12 +86,16 @@ def process_frame():
     h, w, _ = frame.shape
     points_eye = []
     points_mouth = []
+    points_face= []
 
     for idx in p_left_eye + p_right_eye:
         points_eye.append({"x": int(face[idx].x * w), "y": int(face[idx].y * h)})
 
     for idx in p_mouth:
         points_mouth.append({"x": int(face[idx].x * w), "y": int(face[idx].y * h)})
+
+    for idx in p_face:
+        points_face.append({"x": int(face[idx].x * w), "y": int(face[idx].y * h)})
 
     # lógica de piscada / olhos fechados
     if ear < ear_limiar:  
@@ -114,6 +121,7 @@ def process_frame():
         "sleepy": sleepy,
         "eyes": points_eye,
         "mouth": points_mouth,
+        "face": points_face,
         "frame_width": w,
         "frame_height": h
     })

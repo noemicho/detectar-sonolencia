@@ -55,6 +55,7 @@ button {
   border: none;
   border-radius: 6px;
   padding: 10px 20px;
+  margin: 5px;
   cursor: pointer;
   transition: background 0.3s;
 }
@@ -81,4 +82,12 @@ button:hover {
   color: red;
   margin-top: 15px;
   font-weight: bold;
+}
+
+#show-points {
+  background-color: #7a1892;
+}
+
+#show-points:hover {
+  background-color: #5a0a6e;
 }

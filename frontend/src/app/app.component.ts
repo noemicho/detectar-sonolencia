@@ -15,6 +15,7 @@ export class AppComponent {
   @ViewChild('overlay') overlayRef!: ElementRef;
   data: any;
   showOverlay: boolean = false;
+  showButton: boolean = false;
 
   constructor(private http: HttpClient) {}
   
@@ -40,6 +41,9 @@ export class AppComponent {
     this.http.post('http://localhost:5000/process_frame', { image: dataUrl })
       .subscribe(res => {
         this.data = res;
+        if (this.data) {
+          this.showButton = true;
+        }
         if(this.showOverlay){
           this.drawOverlay(res);
         }
@@ -103,6 +107,32 @@ export class AppComponent {
       const scaleY = canvas.height / res.frame_height;
 
       res.mouth.forEach((pt: any, i: number) => {
+        let x = pt.x * scaleX;
+        let y = pt.y * scaleY;
+        x = canvas.width - x;
+
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+  
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    // Contorno do rosto
+    if (res.face) {
+      ctx.strokeStyle = "gray";
+      ctx.fillStyle = "white";
+      ctx.lineWidth = 2;
+  
+      ctx.beginPath();
+      const scaleX = canvas.width / res.frame_width;
+      const scaleY = canvas.height / res.frame_height;
+
+      res.face.forEach((pt: any, i: number) => {
         let x = pt.x * scaleX;
         let y = pt.y * scaleY;
         x = canvas.width - x;
